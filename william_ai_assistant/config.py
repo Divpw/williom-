@@ -1,7 +1,7 @@
 # Configuration for William AI Assistant
 
 # OpenRouter API Configuration
-OPENROUTER_API_KEY = "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"  # Replace with your actual OpenRouter API key
+OPENROUTER_API_KEY = "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"  # Replace with your actual OpenRouter API key
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "deepseek/deepseek-r1-0528:free" # Corrected model name
 
