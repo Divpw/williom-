@@ -1,5 +1,6 @@
 # Main application file for William AI Assistant
 import time
+import sys # For sys.exit()
 from william_ai_assistant import audio_listener
 # william_brain and system_commands will be used by the router, not directly by main's process_command
 # from william_ai_assistant import william_brain
@@ -63,8 +64,8 @@ def main():
     """
     global command_router_instance
 
-    tts_engine.initialize_engine()
-    audio_listener.adjust_for_ambient_noise()
+    # TTS engine is initialized in the `if __name__ == "__main__":` block before `main()` is called.
+    audio_listener.adjust_for_ambient_noise() # This will also initialize the microphone if needed.
 
     # Initialize ContextManager for conversation history
     context_manager = ContextManager()
@@ -72,6 +73,11 @@ def main():
     # Initialize CommandRouter
     command_router_instance = CommandRouter()
     print("Command Router initialized.")
+
+    # Personal Assistant Declaration
+    declaration_message = "🚫 William AI is a private desktop assistant. Not intended for distribution."
+    print(declaration_message)
+    tts_engine.speak(declaration_message)
 
     tts_engine.speak("William AI Assistant is now active.")
 
@@ -88,7 +94,8 @@ def main():
             command_text = None
             if currently_listening_for_command:
                 print("Listening for next command...")
-                command_text = audio_listener.listen_for_command(timeout=10, phrase_time_limit=10) # Use a timeout
+                # phrase_time_limit is handled by listen_for_command internally via config
+                command_text = audio_listener.listen_for_command()
                 if command_text is None: # Timeout or silence
                     if hasattr(root_config, 'always_listen') and root_config.always_listen:
                         # Still in always listen mode, just loop again after a short pause perhaps
@@ -138,35 +145,53 @@ def main():
 
 
     except KeyboardInterrupt:
-        print("\nExiting William AI Assistant...")
-        tts_engine.speak("Goodbye!")
+        print("\nExiting William AI Assistant via KeyboardInterrupt...")
+        if tts_engine.engine_initialized:
+            tts_engine.speak("Goodbye!")
+        # Resources like microphone (if held outside 'with' or in global scope)
+        # or TTS engine itself might need explicit cleanup if not handled by OS on exit.
+        # pyttsx3 engine doesn't usually need explicit stop on normal exit.
+        # Microphone is used with context manager, so it should release.
+        print("Exited cleanly.")
+        sys.exit(0)
     except Exception as e:
-        print(f"An unexpected error occurred in main loop: {e}")
-        tts_engine.speak("An unexpected error occurred. I have to shut down.")
-        # Log the error to a file or more detailed logging mechanism if desired
+        error_message = f"An unexpected error occurred in main loop: {e}"
+        print(error_message)
+        # Add more detailed logging here if a logging framework is introduced
+        # For now, just printing to console.
+
+        if tts_engine.engine_initialized:
+            tts_engine.speak("Something went wrong. Shutting down.")
+        else:
+            # This case might happen if TTS failed to initialize early on
+            print("TTS not available to announce shutdown.")
+
+        # Attempt to clean up resources if any were globally acquired and not managed by context managers
+        # For example, if tts_engine had a specific close/shutdown method:
+        # if hasattr(tts_engine, 'shutdown') and callable(tts_engine.shutdown):
+        # tts_engine.shutdown()
+        # For speech_recognition's Microphone, it's typically used with a context manager,
+        # which handles cleanup. If used globally, it might need explicit closing.
+        # However, current audio_listener.py uses 'with microphone as source:'.
+
+        print("Application shutting down due to an error.")
+        sys.exit(1) # Exit with a non-zero code to indicate an error
 
 if __name__ == "__main__":
-    # Check for API key before starting, as it's crucial for part of the functionality
-    if not app_config.OPENROUTER_API_KEY or app_config.OPENROUTER_API_KEY == "YOUR_OPENROUTER_API_KEY_HERE":
-        print("CRITICAL ERROR: OpenRouter API key is not set in william_ai_assistant/config.py.")
-        print("Please set OPENROUTER_API_KEY to your actual key to use LLM features.")
-        # Optionally, initialize TTS just to speak this message if possible
-        try:
-            tts_engine.initialize_engine()
-            if tts_engine.engine_initialized:
-                 tts_engine.speak("Critical Error: OpenRouter API key is not configured. Please set it in the config file and restart.")
-        except Exception:
-            pass # Ignore if TTS itself fails here
-    elif app_config.OPENROUTER_API_KEY == "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": # Example key
-        print("WARNING: Using the example OpenRouter API key provided in the prompt.")
-        print("LLM features may be limited or not work as expected without a dedicated key.")
-        print("The application will proceed, but for full functionality, please use your own OpenRouter API key.")
-        try:
-            tts_engine.initialize_engine() # Ensure tts is up to voice the warning
-            if tts_engine.engine_initialized:
-                tts_engine.speak("Warning: You are using the example API key. LLM features might be restricted. Please consider using your own OpenRouter API key for full functionality.")
-        except Exception:
-            pass
-        main() # Proceed even with the example key
-    else:
-        main()
+    # API key is now loaded from .env via config.py
+    # Initial check to ensure tts_engine can be initialized for critical errors.
+    try:
+        tts_engine.initialize_engine()
+    except Exception as e:
+        print(f"FATAL: Could not initialize TTS engine: {e}. The application cannot continue.")
+        # No tts_engine.speak here as it might be the source of the problem.
+        # Consider logging to a file here if advanced logging is set up.
+        exit(1) # Exit if TTS cannot start, as it's critical for feedback.
+
+    if not app_config.OPENROUTER_API_KEY:
+        error_message = "CRITICAL ERROR: OpenRouter API key is not found. Please ensure it is set in the .env file."
+        print(error_message)
+        tts_engine.speak(error_message + " The application will now exit.")
+        exit(1) # Exit if API key is missing
+
+    main()

@@ -4,6 +4,7 @@ pyttsx3>=2.90
 requests>=2.25.1
 playsound==1.2.2 # For playing audio files (like music)
 pycaw>=20230522 # For Windows volume control
+python-dotenv>=0.19.0 # For loading .env files
 # For specific system command functionalities (optional, install if needed and implemented):
 # pvporcupine # For more advanced wake word detection (if implemented)
 # vosk # For offline speech recognition (if implemented)
