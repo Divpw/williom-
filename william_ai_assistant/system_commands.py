@@ -4,6 +4,9 @@ import datetime
 import webbrowser
 import subprocess
 import platform
+import random
+import playsound
+from typing import Optional
 from william_ai_assistant import tts_engine # Assuming tts_engine.py will have a speak function
 
 # --- Command Implementations ---
@@ -74,60 +77,231 @@ def play_music():
         print(f"Error trying to play music: {e}")
         return "Sorry, I had trouble trying to play music."
 
-def set_volume(level_percent):
+def play_random_music_from_library(music_query: Optional[str] = None) -> str:
     """
-    Sets the system volume (0-100%).
-    This is a placeholder as it's OS-dependent and complex.
-    Requires external libraries like pycaw for Windows, or osascript for macOS.
+    Plays a random .mp3 or .wav file from the user's Music folder.
+    If a query is provided, it will try to find a matching song. (Basic implementation)
     """
-    system = platform.system()
     try:
-        if system == "Windows":
-            # Using pycaw would be:
-            # from comtypes import CLSCTX_ALL
-            # from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-            # devices = AudioUtilities.GetSpeakers()
-            # interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            # volume = cast(interface, POINTER(IAudioEndpointVolume))
-            # volume.SetMasterVolumeLevelScalar(level_percent / 100.0, None)
-            return f"Volume control for Windows needs the 'pycaw' library. Set volume to {level_percent}% (simulated)."
-        elif system == "Darwin": # macOS
-            subprocess.call(["osascript", "-e", f"set volume output volume {level_percent}"])
-            return f"Setting volume to {level_percent}%."
-        elif system == "Linux":
-            # For systems using ALSA with amixer:
-            subprocess.call(["amixer", "-D", "pulse", "sset", "Master", f"{level_percent}%"])
-            return f"Setting master volume to {level_percent}%."
-        else:
-            return "Volume control is not supported on this operating system yet."
-    except FileNotFoundError:
-        return f"Required command for volume control not found on your {system} system."
+        music_dir = os.path.expanduser("~/Music")
+        if not os.path.isdir(music_dir):
+            return "I couldn't find your Music folder."
+
+        music_files = []
+        for root, _, files in os.walk(music_dir):
+            for file in files:
+                if file.lower().endswith((".mp3", ".wav")):
+                    music_files.append(os.path.join(root, file))
+
+        if not music_files:
+            return "I didn't find any .mp3 or .wav files in your Music folder."
+
+        selected_file = None
+        if music_query:
+            # Basic search: check if query is in filename (case-insensitive)
+            # More advanced search would involve metadata or fuzzy matching
+            matching_files = [f for f in music_files if music_query.lower() in os.path.basename(f).lower()]
+            if matching_files:
+                selected_file = random.choice(matching_files)
+                song_name = os.path.basename(selected_file)
+                # playsound is blocking, so we might want to run it in a thread if the assistant needs to be responsive
+                # For now, let's keep it simple.
+                playsound.playsound(selected_file)
+                return f"Playing '{song_name}'."
+            else:
+                return f"Sorry, I couldn't find a song matching '{music_query}'. Playing a random song instead."
+                # Fall through to play random if specific query not found, or handle differently
+
+        if not selected_file: # Play random if no query or query not found (and decided to play random)
+            selected_file = random.choice(music_files)
+            song_name = os.path.basename(selected_file)
+            playsound.playsound(selected_file) # This is blocking
+            return f"Playing a random song: '{song_name}'."
+
+    except ImportError:
+        return "The 'playsound' library is not installed. Please install it to play music."
+    except Exception as e:
+        # Catch specific playsound errors if known, e.g., PlaysoundException
+        print(f"Error playing music: {e}")
+        return f"Sorry, I encountered an error trying to play music: {e}"
+
+# --- Volume Control Functions (Windows specific with pycaw) ---
+_volume_interface = None
+
+def _get_windows_volume_interface():
+    """Initializes and returns the pycaw volume interface."""
+    global _volume_interface
+    if _volume_interface:
+        return _volume_interface
+    try:
+        from comtypes import CLSCTX_ALL, cast, POINTER
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        _volume_interface = cast(interface, POINTER(IAudioEndpointVolume))
+        return _volume_interface
+    except ImportError:
+        print("pycaw library not found. Please install it for volume control on Windows.")
+        return None
+    except Exception as e:
+        print(f"Failed to initialize pycaw: {e}")
+        return None
+
+def set_volume_percentage_windows(level_percent: int) -> str:
+    """Sets the system master volume to a specified percentage (0-100) on Windows."""
+    if platform.system() != "Windows":
+        return "Volume control via pycaw is only for Windows."
+
+    volume_control = _get_windows_volume_interface()
+    if not volume_control:
+        return "Volume control interface not available."
+
+    try:
+        level = max(0, min(100, level_percent)) # Clamp between 0 and 100
+        volume_control.SetMasterVolumeLevelScalar(level / 100.0, None)
+        return f"Volume set to {level}%."
     except Exception as e:
         print(f"Error setting volume: {e}")
-        return f"Sorry, I couldn't change the volume on {system}."
+        return f"Sorry, I couldn't set the volume: {e}"
 
-def increase_volume(step=10):
-    """Increases system volume by a step (default 10%). Placeholder."""
-    # This would ideally get current volume and add, then call set_volume.
-    # For now, it's a direct call to simulate.
-    # On macOS and Linux, we can often get current volume.
-    # For simplicity, we'll just call set_volume with a target or simulate.
-    return f"Volume increase by {step}% requested. (This is a placeholder, full implementation is complex)."
-    # Example for macOS:
-    # current_volume_str = subprocess.check_output(["osascript", "-e", "output volume of (get volume settings)"]).strip().decode()
-    # current_volume = int(current_volume_str)
-    # new_volume = min(100, current_volume + step)
-    # return set_volume(new_volume)
+def increase_volume_windows(step_percent: int = 10) -> str:
+    """Increases the system master volume by a step percentage on Windows."""
+    if platform.system() != "Windows":
+        return "Volume control via pycaw is only for Windows."
+
+    volume_control = _get_windows_volume_interface()
+    if not volume_control:
+        return "Volume control interface not available."
+
+    try:
+        current_volume_scalar = volume_control.GetMasterVolumeLevelScalar()
+        current_volume_percent = int(current_volume_scalar * 100)
+        new_volume_percent = min(100, current_volume_percent + step_percent)
+        volume_control.SetMasterVolumeLevelScalar(new_volume_percent / 100.0, None)
+        return f"Volume increased to {new_volume_percent}%."
+    except Exception as e:
+        print(f"Error increasing volume: {e}")
+        return f"Sorry, I couldn't increase the volume: {e}"
+
+def decrease_volume_windows(step_percent: int = 10) -> str:
+    """Decreases the system master volume by a step percentage on Windows."""
+    if platform.system() != "Windows":
+        return "Volume control via pycaw is only for Windows."
+
+    volume_control = _get_windows_volume_interface()
+    if not volume_control:
+        return "Volume control interface not available."
+
+    try:
+        current_volume_scalar = volume_control.GetMasterVolumeLevelScalar()
+        current_volume_percent = int(current_volume_scalar * 100)
+        new_volume_percent = max(0, current_volume_percent - step_percent)
+        volume_control.SetMasterVolumeLevelScalar(new_volume_percent / 100.0, None)
+        return f"Volume decreased to {new_volume_percent}%."
+    except Exception as e:
+        print(f"Error decreasing volume: {e}")
+        return f"Sorry, I couldn't decrease the volume: {e}"
+
+def toggle_mute_windows() -> str:
+    """Toggles the system master volume mute state on Windows."""
+    if platform.system() != "Windows":
+        return "Volume control via pycaw is only for Windows."
+
+    volume_control = _get_windows_volume_interface()
+    if not volume_control:
+        return "Volume control interface not available."
+
+    try:
+        is_muted = volume_control.GetMute()
+        volume_control.SetMute(not is_muted, None)
+        return "System muted." if not is_muted else "System unmuted."
+    except Exception as e:
+        print(f"Error toggling mute: {e}")
+        return f"Sorry, I couldn't toggle mute: {e}"
+
+# --- Fallback/Cross-platform Stubs for non-Windows or if pycaw fails ---
+# These replace the old set_volume, increase_volume, decrease_volume placeholders
+
+def set_volume(level_percent: int) -> str:
+    """Sets the system volume (0-100%). Uses Windows specific if available."""
+    if platform.system() == "Windows":
+        # Check if pycaw is available and successfully imported by _get_windows_volume_interface
+        if _get_windows_volume_interface():
+             return set_volume_percentage_windows(level_percent)
+        else: # pycaw not available or failed to init
+            return "Windows volume control requires pycaw, which is not available or failed to initialize."
+    elif platform.system() == "Darwin": # macOS
+        try:
+            subprocess.call(["osascript", "-e", f"set volume output volume {level_percent}"])
+            return f"Setting volume to {level_percent}% on macOS."
+        except FileNotFoundError:
+            return "osascript not found. Cannot control volume on macOS."
+        except Exception as e:
+            return f"Error setting volume on macOS: {e}"
+    elif platform.system() == "Linux": # Linux (using amixer, requires ALSA utils)
+        try:
+            subprocess.call(["amixer", "-D", "pulse", "sset", "Master", f"{level_percent}%"])
+            return f"Attempting to set master volume to {level_percent}% on Linux."
+        except FileNotFoundError:
+            return "amixer not found. Cannot control volume on Linux."
+        except Exception as e:
+            return f"Error setting volume on Linux: {e}"
+    else:
+        return "Volume control is not supported on this operating system yet."
+
+def increase_volume(step: int = 10) -> str:
+    """Increases system volume by a step (default 10%). Uses Windows specific if available."""
+    if platform.system() == "Windows":
+        if _get_windows_volume_interface():
+            return increase_volume_windows(step)
+        else:
+            return "Windows volume control requires pycaw, which is not available or failed to initialize."
+    # Add macOS/Linux specific implementations if desired, similar to set_volume
+    # For now, a generic message for non-Windows or if specific implementation is missing
+    current_vol_msg = "(Current volume not read for this OS in generic increase)"
+    return f"Volume increase by {step}% requested. {current_vol_msg}"
 
 
-def decrease_volume(step=10):
-    """Decreases system volume by a step (default 10%). Placeholder."""
-    return f"Volume decrease by {step}% requested. (This is a placeholder, full implementation is complex)."
-    # Example for macOS:
-    # current_volume_str = subprocess.check_output(["osascript", "-e", "output volume of (get volume settings)"]).strip().decode()
-    # current_volume = int(current_volume_str)
-    # new_volume = max(0, current_volume - step)
-    # return set_volume(new_volume)
+def decrease_volume(step: int = 10) -> str:
+    """Decreases system volume by a step (default 10%). Uses Windows specific if available."""
+    if platform.system() == "Windows":
+        if _get_windows_volume_interface():
+            return decrease_volume_windows(step)
+        else:
+            return "Windows volume control requires pycaw, which is not available or failed to initialize."
+    # Add macOS/Linux specific implementations if desired
+    current_vol_msg = "(Current volume not read for this OS in generic decrease)"
+    return f"Volume decrease by {step}% requested. {current_vol_msg}"
+
+def mute_system() -> str:
+    """Mutes the system. Uses Windows specific if available."""
+    if platform.system() == "Windows":
+        if _get_windows_volume_interface():
+            # Ensure it mutes, not toggles, if current state is unmuted
+            vc = _get_windows_volume_interface()
+            if vc:
+                vc.SetMute(1, None)
+                return "System muted."
+            return "Volume control interface not available for mute."
+        else:
+            return "Windows volume control requires pycaw for mute."
+    # Add macOS/Linux specific implementations
+    return "Mute function not fully implemented for this OS."
+
+def unmute_system() -> str:
+    """Unmutes the system. Uses Windows specific if available."""
+    if platform.system() == "Windows":
+        if _get_windows_volume_interface():
+            vc = _get_windows_volume_interface()
+            if vc:
+                vc.SetMute(0, None)
+                return "System unmuted."
+            return "Volume control interface not available for unmute."
+        else:
+            return "Windows volume control requires pycaw for unmute."
+    # Add macOS/Linux specific implementations
+    return "Unmute function not fully implemented for this OS."
+
 
 # --- Command Mapping and Processing ---
 
