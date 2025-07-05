@@ -1,10 +1,10 @@
 {
     "currentCommand": "",
-    "thoughtProcess": "Processing new command...\nSending request to LLM (google/gemini-2.0-flash-exp:free) for input: 'what are you doing...'\nError connecting to OpenRouter API: 429 Client Error: Too Many Requests for url: https://openrouter.ai/api/v1/chat/completions\nCommand processed. Displaying response.\nListening for wake word...",
+    "thoughtProcess": "Processing new command...\nSending request to LLM (google/gemini-2.0-flash-exp:free) for input: 'search for the best ai tools in 2025...'\nHTTP error with google/gemini-2.0-flash-exp:free: 401 Client Error: Unauthorized for url: https://openrouter.ai/api/v1/chat/completions. Trying fallback model...\nSending request to LLM (deepseek/deepseek-r1-0528:free) for input: 'search for the best ai tools in 2025...'\nHTTP error with deepseek/deepseek-r1-0528:free: 401 Client Error: Unauthorized for url: https://openrouter.ai/api/v1/chat/completions\nCommand processed. Displaying response.\nListening for wake word...\nWake word detected. Listening for command...\nNo command heard after wake word. Reverting to wake word listening.\nListening for wake word...",
     "webActions": [],
     "aiResponse": "",
     "systemEvents": [
-        "Canvas Initialized at 2025-07-05T08:54:24.999581+00:00"
+        "Canvas Initialized at 2025-07-05T09:06:41.410067+00:00"
     ],
-    "lastUpdated": "2025-07-05T08:54:46.849953+00:00"
+    "lastUpdated": "2025-07-05T09:07:33.941414+00:00"
 }
