@@ -9,6 +9,11 @@ load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "google/gemini-2.0-flash-exp:free" # Updated to Gemini 2.0 Flash
+OPENROUTER_FALLBACK_MODEL = "deepseek/deepseek-r1-0528:free" # Fallback model
+
+# Optional headers for OpenRouter - can be left empty if not needed
+OPENROUTER_SITE_URL = os.getenv("OPENROUTER_SITE_URL", "") # e.g., "http://localhost" or your actual site
+OPENROUTER_SITE_NAME = os.getenv("OPENROUTER_SITE_NAME", "") # e.g., "William AI Assistant"
 
 # Wake Word
 WAKE_WORD = "hey william"
