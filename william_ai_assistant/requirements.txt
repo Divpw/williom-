@@ -1,0 +1,8 @@
+SpeechRecognition>=3.8.1
+PyAudio>=0.2.11 # Required by SpeechRecognition for microphone input
+pyttsx3>=2.90
+requests>=2.25.1
+# For specific system command functionalities (optional, install if needed and implemented):
+# pycaw>=20181221 # For Windows volume control (if full implementation is desired)
+# pvporcupine # For more advanced wake word detection (if implemented)
+# vosk # For offline speech recognition (if implemented)
