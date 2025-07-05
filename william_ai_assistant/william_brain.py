@@ -1,27 +1,52 @@
 # Handles interaction with the LLM (OpenRouter)
 import requests
 import json
-from william_ai_assistant import config, tts_engine
+from william_ai_assistant import config as app_config # Specific app config
+from william_ai_assistant import tts_engine
 
-def get_llm_response(text_input):
+# Attempt to import root config for personality settings
+try:
+    import config as root_config
+except ImportError:
+    # Fallback if running william_brain.py directly and root is not in path
+    class RootConfigMock:
+        enable_personality = False # Default to False if root config not found
+    root_config = RootConfigMock()
+    print("Warning: Root config.py not found, personality disabled by default.")
+
+
+PERSONALITY_PROMPT = """You are William, a witty, intelligent assistant. Respond helpfully and in a natural human tone."""
+
+def get_llm_response(text_input, command_history: list = None):
     """
     Sends the user's text input to OpenRouter and returns the LLM's response.
+    Optionally includes command history.
     """
     headers = {
-        "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {app_config.OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
+    messages = []
+
+    if hasattr(root_config, 'enable_personality') and root_config.enable_personality:
+        messages.append({"role": "system", "content": PERSONALITY_PROMPT})
+
+    # Add command history if provided (to be implemented in context_manager)
+    if command_history:
+        for entry in command_history: # Assuming history is list of {"role": "user/assistant", "content": "..."}
+            messages.append(entry)
+
+    messages.append({"role": "user", "content": text_input})
+
     payload = {
-        "model": config.OPENROUTER_MODEL,
-        "messages": [
-            {"role": "user", "content": text_input}
-        ]
+        "model": app_config.OPENROUTER_MODEL,
+        "messages": messages
     }
 
     try:
-        print(f"Sending to LLM: {text_input}")
-        response = requests.post(config.OPENROUTER_API_URL, headers=headers, data=json.dumps(payload), timeout=30)
+        print(f"Sending to LLM ({app_config.OPENROUTER_MODEL}): Input: '{text_input}', Full payload messages: {messages}")
+        response = requests.post(app_config.OPENROUTER_API_URL, headers=headers, data=json.dumps(payload), timeout=30)
         response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
 
         response_data = response.json()
@@ -53,21 +78,28 @@ def get_llm_response(text_input):
 if __name__ == '__main__':
     # This is for testing the william_brain.py module independently
     # Ensure tts_engine is minimally available for error speech, if needed.
-    if not hasattr(tts_engine, 'pyttsx3'):
-        import pyttsx3 as tts_engine_pyttsx3 # Alias to avoid conflict
-        tts_engine.pyttsx3 = tts_engine_pyttsx3
-        tts_engine.engine = tts_engine.pyttsx3.init()
-        tts_engine.engine.setProperty('rate', config.TTS_RATE)
+    if not hasattr(tts_engine, 'pyttsx3'): # Check if tts_engine was already initialized
+        import pyttsx3 as tts_engine_pyttsx3
+        tts_engine.pyttsx3_module = tts_engine_pyttsx3 # Store module in tts_engine
+        tts_engine.engine = tts_engine.pyttsx3_module.init()
+        if hasattr(app_config, 'TTS_RATE'):
+             tts_engine.engine.setProperty('rate', app_config.TTS_RATE)
+        else: # Fallback if TTS_RATE is not in app_config for some reason
+            tts_engine.engine.setProperty('rate', 150)
+
         def speak_test(text):
             print(f"TTS (test): {text}")
-            tts_engine.engine.say(text)
-            tts_engine.engine.runAndWait()
+            if hasattr(tts_engine, 'engine') and tts_engine.engine:
+                tts_engine.engine.say(text)
+                tts_engine.engine.runAndWait()
+            else:
+                print("TTS engine not initialized for testing.")
         tts_engine.speak = speak_test
 
 
-    if not config.OPENROUTER_API_KEY or config.OPENROUTER_API_KEY == "YOUR_OPENROUTER_API_KEY_HERE":
-        print("ERROR: OpenRouter API key is not set in config.py. Please set it to test this module.")
-        tts_engine.speak("OpenRouter API key is not configured.")
+    if not app_config.OPENROUTER_API_KEY or app_config.OPENROUTER_API_KEY == "YOUR_OPENROUTER_API_KEY_HERE":
+        print("ERROR: OpenRouter API key is not set in william_ai_assistant/config.py. Please set it to test this module.")
+        if hasattr(tts_engine, 'speak'): tts_engine.speak("OpenRouter API key is not configured.")
     else:
         test_prompt = "Hello, who are you?"
         print(f"Testing LLM with prompt: '{test_prompt}'")
