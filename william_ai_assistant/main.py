@@ -1,29 +1,24 @@
 # Main application file for William AI Assistant
 import time
 import sys # For sys.exit()
+import os # For path manipulation
+import webbrowser # For opening the canvas
 from william_ai_assistant import audio_listener
+from . import canvas_utils # Import canvas utilities
 # william_brain and system_commands will be used by the router, not directly by main's process_command
 # from william_ai_assistant import william_brain
 # from william_ai_assistant import system_commands
 from william_ai_assistant import tts_engine
-from william_ai_assistant import config as app_config # Renamed to avoid clash with root config
+from william_ai_assistant import config as app_config # This is the single source of truth for config
 
-from context_manager import ContextManager # Import from root
-from router import CommandRouter # Import from root
+# Imports for context_manager and router, assuming main.py is part of william_ai_assistant package
+from william_ai_assistant.context_manager import ContextManager
+from william_ai_assistant.router import CommandRouter
+# Potentially, if plugin_manager is used directly in main later:
+# from william_ai_assistant.plugin_manager import PluginManager
 
-# Attempt to import root config for always_listen and personality settings
-try:
-    import config as root_config
-except ImportError:
-    # Fallback if running main.py directly and root is not in python path correctly for some reason
-    # (though it should be if context_manager was imported successfully from root)
-    class RootConfigMock:
-        always_listen = False # Default to False
-        enable_personality = False # Default
-    root_config = RootConfigMock()
-    print("Warning: Root config.py not found by main.py, using default values for always_listen and personality.")
 
-# Global command_router instance, initialized in main()
+# Global command_router_instance, initialized in main()
 command_router_instance: CommandRouter = None
 
 def process_command(command_text: str, context_mgr: ContextManager) -> str:
@@ -33,28 +28,36 @@ def process_command(command_text: str, context_mgr: ContextManager) -> str:
     """
     global command_router_instance
     if not command_router_instance:
-        # This should not happen if main() initializes it properly
         error_msg = "CommandRouter not initialized!"
         print(f"CRITICAL ERROR: {error_msg}")
+        if app_config.ENABLE_VISUAL_CANVAS:
+            canvas_utils.update_canvas(ai_response=error_msg, thought_process="Critical error in processing.")
         return error_msg
 
     print(f"Processing command via Router: '{command_text}'")
+    if app_config.ENABLE_VISUAL_CANVAS:
+        # Clear previous response/thoughts for a new cycle, update current command
+        canvas_utils.update_canvas(
+            current_command=command_text,
+            clear_ai_response=True,
+            clear_thought_process=True,
+            # web_actions and system_events might persist or be cleared depending on desired UX
+            # For now, let's clear web_actions for a new command, system_events can accumulate or be managed
+            clear_web_actions=True,
+            thought_process="Processing new command..."
+        )
+
     context_mgr.add_message("user", command_text)
-
-    # Get history BEFORE the current user message for the LLM context
     history_for_llm = context_mgr.get_history()
-    # The user's current command_text is the last item if we get history after adding.
-    # The LLM in william_brain.py expects the current user prompt separately.
-    # So, we can pass history[:-1] or let william_brain handle it if it expects current prompt in history.
-    # Given current william_brain.py, it adds the text_input to messages after processing history.
-    # So, passing the full history from context_mgr (which includes the latest user prompt) is fine.
-
-    # The API key check for OpenRouter is now implicitly handled by william_brain.get_llm_response
-    # if the router's fallback_chat_handler calls it. We don't need the explicit check here anymore.
 
     assistant_response = command_router_instance.route(command_text, history=history_for_llm)
 
     context_mgr.add_message("assistant", assistant_response)
+
+    if app_config.ENABLE_VISUAL_CANVAS:
+        canvas_utils.update_canvas(ai_response=assistant_response, thought_process="Command processed. Displaying response.")
+        # Specific thoughts from LLM or system actions would be updated by those modules directly.
+
     return assistant_response
 
 
@@ -75,14 +78,35 @@ def main():
     print("Command Router initialized.")
 
     # Personal Assistant Declaration
-    declaration_message = "🚫 William AI is a private desktop assistant. Not intended for distribution."
+    declaration_message = "🚫 William AI is a private desktop assistant. Not for public distribution." # Updated message
     print(declaration_message)
-    tts_engine.speak(declaration_message)
+    # tts_engine.speak(declaration_message) # Decided to make this print-only to avoid long startup speech
+
+    # Initialize and Open Visual Canvas if enabled
+    if app_config.ENABLE_VISUAL_CANVAS:
+        canvas_utils.initialize_canvas_data_file() # Initialize the data file
+        try:
+            # Construct path to canvas.html relative to main.py's location
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            canvas_path = os.path.join(base_dir, 'canvas', 'canvas.html')
+            # Check if file exists before attempting to open
+            if os.path.exists(canvas_path):
+                # Prepend 'file://' for local files
+                canvas_url = f"file://{os.path.abspath(canvas_path)}"
+                print(f"Opening Visual Canvas: {canvas_url}")
+                webbrowser.open(canvas_url) # Opens in default browser, Chrome preferred by prompt.
+                                            # To specifically use Chrome: webbrowser.register('chrome', None, webbrowser.BackgroundBrowser("C://Program Files (x86)//Google//Chrome//Application//chrome.exe"))
+                                            # then webbrowser.get('chrome').open(canvas_url)
+                                            # This path might vary, so default browser is safer for now.
+            else:
+                print(f"Error: Canvas HTML file not found at {canvas_path}")
+        except Exception as e:
+            print(f"Could not open visual canvas: {e}")
 
     tts_engine.speak("William AI Assistant is now active.")
 
-    # Determine initial listening mode
-    currently_listening_for_command = hasattr(root_config, 'always_listen') and root_config.always_listen
+    # Determine initial listening mode based on app_config
+    currently_listening_for_command = app_config.ALWAYS_LISTEN
     if not currently_listening_for_command:
         print("William AI Assistant is now active. Listening for wake word...")
     else:
@@ -93,32 +117,48 @@ def main():
         while True:
             command_text = None
             if currently_listening_for_command:
-                print("Listening for next command...")
-                # phrase_time_limit is handled by listen_for_command internally via config
+                listening_status_msg = "Listening for next command..."
+                print(listening_status_msg)
+                if app_config.ENABLE_VISUAL_CANVAS:
+                    canvas_utils.update_canvas(current_command="", thought_process=listening_status_msg, clear_ai_response=True) # Clear previous command/response
+
                 command_text = audio_listener.listen_for_command()
                 if command_text is None: # Timeout or silence
-                    if hasattr(root_config, 'always_listen') and root_config.always_listen:
-                        # Still in always listen mode, just loop again after a short pause perhaps
-                        # print("No command heard, still listening...")
+                    if app_config.ENABLE_VISUAL_CANVAS:
+                        canvas_utils.update_canvas(thought_process="No command heard, still listening (if in always listen mode)...")
+                    if app_config.ALWAYS_LISTEN:
                         time.sleep(0.1) # Brief pause
                         continue
                     else:
-                        # This case should not be reached if always_listen is true and command_text is None due to timeout.
-                        # If always_listen became false somehow, revert to wake word.
-                        currently_listening_for_command = False
+                        # This case implies not in ALWAYS_LISTEN mode and timed out.
+                        # This specific 'else' might be redundant if currently_listening_for_command is already false
+                        # when not in ALWAYS_LISTEN mode after a timeout.
+                        # However, explicit handling is safer.
+                        currently_listening_for_command = False # Should already be false if not ALWAYS_LISTEN
                         print("No command heard. Reverting to wake word.")
-                        tts_engine.speak("No command. Waiting for wake word.")
+                        # tts_engine.speak("No command. Waiting for wake word.") # Can be verbose
                         continue
             else: # Not currently_listening_for_command, so wait for wake word
-                print("Listening for wake word...")
+                listening_status_msg = "Listening for wake word..."
+                print(listening_status_msg)
+                if app_config.ENABLE_VISUAL_CANVAS:
+                    canvas_utils.update_canvas(current_command="", thought_process=listening_status_msg, clear_ai_response=True)
+
                 if audio_listener.listen_for_wake_word():
                     currently_listening_for_command = True # Heard wake word, now listen for command
-                    # Immediately listen for command after wake word
-                    print("Wake word detected. Listening for command...")
+                    wake_word_detected_msg = "Wake word detected. Listening for command..."
+                    print(wake_word_detected_msg)
+                    if app_config.ENABLE_VISUAL_CANVAS:
+                         canvas_utils.update_canvas(thought_process=wake_word_detected_msg)
                     command_text = audio_listener.listen_for_command()
+                    if command_text is None and app_config.ENABLE_VISUAL_CANVAS: # No command after wake word
+                        canvas_utils.update_canvas(thought_process="No command heard after wake word. Reverting to wake word listening.")
                 else:
                     # Error with wake word listener (e.g., speech service error)
-                    print("Error with wake word listener or speech service. Retrying after delay...")
+                    error_msg = "Error with wake word listener or speech service. Retrying after delay..."
+                    print(error_msg)
+                    if app_config.ENABLE_VISUAL_CANVAS:
+                        canvas_utils.update_canvas(thought_process=error_msg, ai_response="Speech service issue.")
                     tts_engine.speak("There was an issue with the speech service. I will try again.")
                     time.sleep(3)
                     continue # Retry listening for wake word
@@ -128,7 +168,7 @@ def main():
                 tts_engine.speak(assistant_response)
 
                 # Decide if we should continue listening for a command or go back to wake word
-                if hasattr(root_config, 'always_listen') and root_config.always_listen:
+                if app_config.ALWAYS_LISTEN:
                     currently_listening_for_command = True
                     # No need to print "listening for next command" here, it's at the start of the loop
                 else:
@@ -136,11 +176,14 @@ def main():
                     print("Command processed. Listening for wake word...")
                     # tts_engine.speak("Waiting for wake word.") # Can be too verbose
             else:
-                # No command heard after wake word, or timeout in always_listen mode
-                if currently_listening_for_command and not (hasattr(root_config, 'always_listen') and root_config.always_listen):
-                    # This means wake word was heard, but no command followed. Revert to wake word.
+                # No command heard after wake word, or timeout in always_listen mode.
+                # If ALWAYS_LISTEN is false, and we were listening for a command (e.g. after wake word),
+                # but got no command, we should revert to wake word listening.
+                if currently_listening_for_command and not app_config.ALWAYS_LISTEN:
+                    # This means wake word was heard (or it was the first command attempt in non-always-listen mode)
+                    # but no command followed. Revert to wake word.
                     currently_listening_for_command = False
-                    print("No command heard after wake word. Listening for wake word again...")
+                    print("No command heard. Listening for wake word again...")
                     # tts_engine.speak("I didn't catch that. Waiting for wake word.")
 
 
