@@ -2,32 +2,24 @@ import re
 import webbrowser
 from typing import Callable, Dict, Optional, Tuple, Pattern
 
-# Import actual handlers
-# Assuming router.py is in the root, and william_ai_assistant is a package
-# If router.py is moved into the package, the import path would change.
-try:
-    from william_ai_assistant.system_commands import (
-        play_random_music_from_library,
-        set_volume,
-        increase_volume,
-        decrease_volume,
-        mute_system,
-        unmute_system
-    )
-    from william_ai_assistant.william_brain import get_llm_response
-except ImportError:
-    print("Warning: Could not import handlers or get_llm_response from william_ai_assistant package. Using placeholders.")
-    # Define placeholders if import fails, useful for standalone testing of router logic
-    def play_random_music_from_library(query: Optional[str] = None) -> str:
-        return f"Placeholder: Playing music. Query: {query if query else 'random'}"
-    def set_volume(level: int) -> str: return f"Placeholder: Set volume to {level}%"
-    def increase_volume() -> str: return "Placeholder: Increase volume"
-    def decrease_volume() -> str: return "Placeholder: Decrease volume"
-    def mute_system() -> str: return "Placeholder: Mute system"
-    def unmute_system() -> str: return "Placeholder: Unmute system"
-    def get_llm_response(text: str, history: Optional[list] = None) -> str:
-        return f"Placeholder LLM: You said '{text}' with history: {history}"
-    # Define other placeholders here
+# Import actual handlers using relative imports as router.py is inside the package
+from .system_commands import (
+    play_random_music_from_library,
+    set_volume,
+    increase_volume,
+    decrease_volume,
+    mute_system,
+    unmute_system
+)
+from .william_brain import get_llm_response
+from .plugin_manager import PluginManager # Import PluginManager
+
+
+# Placeholder for actual functions - these would be in other modules
+# Note: The try-except block for imports with placeholders might be less necessary
+# if the package structure is consistently used. For robustness during development,
+# or if parts can be run standalone, they can be kept.
+# For now, assuming direct imports will work due to correct structure.
 
 
 # Placeholder for actual functions - these would be in other modules
@@ -96,6 +88,7 @@ def fallback_chat_handler(text: str, history: Optional[list] = None) -> str:
 class CommandRouter:
     def __init__(self):
         self.routes: Dict[Pattern[str], Callable[..., str]] = {}
+        self.plugin_manager = PluginManager() # Instantiate PluginManager
         # The fallback handler now needs history, so it cannot be pre-registered
         # in _register_default_routes in the same way if we want 'route' to pass history to it.
         # Instead, fallback_chat_handler will be called explicitly by the route method.
@@ -185,9 +178,19 @@ class CommandRouter:
             if match:
                 # The handler_wrapper will correctly call the underlying handler
                 # It now also accepts history, mainly for the fallback scenario within wrapped_handler
-                return handler_wrapper(text, history=history)
+                return handler_wrapper(text, history=history) # Pass history here
 
-        # If no specific command pattern matched, use the fallback chat handler
+        # If no specific command pattern matched, try the plugin manager
+        # PluginManager's route_command expects (command_text, context=None)
+        # We can pass 'history' as part of the context if plugins might need it.
+        # For now, let's keep it simple and not pass history as context to plugins by default.
+        # If a plugin needs history, its 'execute_command' could be designed to accept it.
+        plugin_response = self.plugin_manager.route_command(text) # context could be {'history': history}
+        if plugin_response is not None:
+            print(f"Command handled by plugin: {plugin_response}")
+            return plugin_response
+
+        # If no plugin handled it either, use the fallback chat handler
         return fallback_chat_handler(text, history=history)
 
 if __name__ == '__main__':

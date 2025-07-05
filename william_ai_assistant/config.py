@@ -8,7 +8,7 @@ load_dotenv()
 # OpenRouter API Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "deepseek/deepseek-r1-0528:free" # Corrected model name
+OPENROUTER_MODEL = "google/gemini-2.0-flash-exp:free" # Updated to Gemini 2.0 Flash
 
 # Wake Word
 WAKE_WORD = "hey william"
@@ -28,3 +28,11 @@ NON_SPEAKING_DURATION = 0.5 # seconds of non-speaking audio to keep on the end o
 
 # TTS settings
 TTS_RATE = 150 # words per minute for text-to-speech output
+
+# Visual Canvas
+ENABLE_VISUAL_CANVAS = True # Set to False to disable the UI dashboard
+CANVAS_DATA_FILE = "william_canvas_data.json" # File for passing data to the canvas
+
+# Operational Mode
+ALWAYS_LISTEN = False  # Set to True to enable 'always listen' mode, False to require wake word after each command.
+ENABLE_PERSONALITY = True # Set to True to enable more personality in responses, False for more direct answers.

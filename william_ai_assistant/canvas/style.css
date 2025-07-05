@@ -1,0 +1,123 @@
+/* William AI Canvas Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f7f6;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+header {
+    text-align: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+header h1 {
+    color: #2c3e50;
+    margin: 0;
+}
+
+main section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background-color: #fdfdfd;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+}
+
+main section h2 {
+    color: #3498db;
+    margin-top: 0;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+    font-size: 1.5em;
+}
+
+#thought-process pre {
+    background-color: #2d3436; /* Darker background for thoughts */
+    color: #dfe6e9; /* Light text for thoughts */
+    padding: 15px;
+    border-radius: 4px;
+    white-space: pre-wrap; /* Allow text wrapping */
+    word-wrap: break-word;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.95em;
+}
+
+#web-actions ul, #system-events ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+#web-actions li, #system-events li {
+    padding: 8px 0;
+    border-bottom: 1px dotted #eee;
+}
+
+#web-actions li:last-child, #system-events li:last-child {
+    border-bottom: none;
+}
+
+footer {
+    text-align: center;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+    font-size: 0.9em;
+    color: #7f8c8d;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        margin: 10px;
+        padding: 15px;
+    }
+
+    header h1 {
+        font-size: 1.8em;
+    }
+
+    main section h2 {
+        font-size: 1.3em;
+    }
+}
+
+/* Status Badges/Animations Placeholder */
+.status-badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8em;
+    color: white;
+}
+
+.status-opening {
+    background-color: #f39c12; /* Orange */
+}
+
+.status-playing {
+    background-color: #2ecc71; /* Green */
+}
+
+.status-thinking {
+    background-color: #9b59b6; /* Purple */
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
